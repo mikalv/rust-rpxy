@@ -100,8 +100,8 @@ where
         return Err(HttpError::SniHostInconsistency);
       }
     }
-    // Find backend application for given server_name, and drop if incoming request is invalid as request.
-    let backend_app = match self.app_manager.apps.get(&server_name) {
+    // Find backend application for given server_name (supports wildcard patterns)
+    let backend_app = match self.app_manager.find_app(&server_name) {
       Some(backend_app) => backend_app,
       None => {
         let default_server_name = self

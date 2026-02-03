@@ -34,6 +34,10 @@ pub struct ConfigToml {
   pub apps: Option<Apps>,
   pub default_app: Option<String>,
   pub experimental: Option<Experimental>,
+  /// Base directory for data files (ACME certs, cache, etc.)
+  /// Required if ACME or cache features are used.
+  /// Can be absolute or relative to config file location.
+  pub data_dir: Option<String>,
 }
 
 /// Extension trait for config validation and building
@@ -293,11 +297,22 @@ impl TryInto<ProxyConfig> for &ConfigToml {
 
       #[cfg(feature = "cache")]
       if let Some(cache_option) = &exp.cache {
+        // Require data_dir if cache is enabled
+        let data_dir = self.data_dir.as_ref().ok_or_else(|| {
+          anyhow!("Cache is enabled but 'data_dir' is not set. Please add to your config:\n  data_dir = \"/var/lib/rpxy\"")
+        })?;
+
         proxy_config.cache_enabled = true;
-        proxy_config.cache_dir = match &cache_option.cache_dir {
-          Some(cache_dir) => Some(std::path::PathBuf::from(cache_dir)),
-          None => Some(std::path::PathBuf::from(CACHE_DIR)),
+
+        // Resolve cache_dir against data_dir
+        let cache_subpath = cache_option.cache_dir.as_deref().unwrap_or("cache");
+        let cache_path = std::path::PathBuf::from(cache_subpath);
+        proxy_config.cache_dir = if cache_path.is_absolute() {
+          Some(cache_path)
+        } else {
+          Some(std::path::PathBuf::from(data_dir).join(cache_path))
         };
+
         if let Some(num) = cache_option.max_cache_entry {
           proxy_config.cache_max_entry = num;
         }
@@ -354,6 +369,15 @@ impl Application {
       {
         if tls.acme.unwrap_or(false) {
           ensure!(tls.tls_cert_key_path.is_none() && tls.tls_cert_path.is_none());
+
+          // Block ACME + wildcard combination (requires DNS-01 challenge which is not yet supported)
+          if server_name_string.contains('*') {
+            return Err(anyhow!(
+              "Wildcard domain '{}' cannot use ACME. Wildcard certificates require DNS-01 challenge which is not yet supported. \
+               Please provide manual certificates via tls_cert_path and tls_cert_key_path.",
+              server_name_string
+            ));
+          }
         } else {
           ensure!(tls.tls_cert_key_path.is_some() && tls.tls_cert_path.is_some());
         }

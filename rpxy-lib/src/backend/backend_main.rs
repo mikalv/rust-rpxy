@@ -7,6 +7,7 @@ use crate::{
 use ahash::HashMap;
 use derive_builder::Builder;
 use std::borrow::Cow;
+use wildcard::Wildcard;
 
 use super::upstream::PathManager;
 
@@ -43,6 +44,35 @@ pub struct BackendAppManager {
   pub apps: HashMap<ServerName, BackendApp>,
   /// for plaintext http
   pub default_server_name: Option<ServerName>,
+}
+
+impl BackendAppManager {
+  /// Find backend app for given server name.
+  /// First tries exact match, then falls back to wildcard matching.
+  /// Exact matches always take priority over wildcard patterns.
+  pub fn find_app(&self, server_name: &ServerName) -> Option<&BackendApp> {
+    // 1. Try exact match first
+    if let Some(app) = self.apps.get(server_name) {
+      return Some(app);
+    }
+
+    // 2. Try wildcard match
+    let server_name_str: String = server_name.try_into().unwrap_or_default();
+    let server_name_bytes = server_name_str.as_bytes();
+
+    for (pattern_name, app) in &self.apps {
+      let pattern_str: String = pattern_name.try_into().unwrap_or_default();
+      if pattern_str.contains('*') {
+        if let Ok(pattern) = Wildcard::new(pattern_str.as_bytes()) {
+          if pattern.is_match(server_name_bytes) {
+            return Some(app);
+          }
+        }
+      }
+    }
+
+    None
+  }
 }
 
 impl TryFrom<&AppConfig> for BackendApp {

@@ -3,8 +3,8 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 /// Error type for rpxy-acme
 pub enum RpxyAcmeError {
-  /// Invalid acme registry path
-  #[error("Invalid acme registry path")]
+  /// Missing or invalid acme registry path
+  #[error("ACME registry path is required. Configure 'data_dir' in your config file.")]
   InvalidAcmeRegistryPath,
   /// Invalid url
   #[error("Invalid url: {0}")]

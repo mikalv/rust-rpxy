@@ -2062,6 +2062,7 @@ dependencies = [
  "tokio-test",
  "tokio-util",
  "tracing",
+ "wildcard",
 ]
 
 [[package]]
@@ -3108,6 +3109,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12bed680863276c63889429bfd6cab3b99943659923822de1c8a39c49e4d722c"
 dependencies = [
  "rustls-pki-types",
+]
+
+[[package]]
+name = "wildcard"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36241ad0795516b55e3b60e55c7f979d4f324e4aaea4c70d56b548b9164ee4d2"
+dependencies = [
+ "thiserror 1.0.69",
 ]
 
 [[package]]

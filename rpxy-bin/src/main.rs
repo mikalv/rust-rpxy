@@ -261,15 +261,16 @@ async fn rpxy_service(
         };
         match RpxyService::new(&new_config_toml, runtime_handle.clone()).await {
           Ok(new_service) => {
-            info!("Configuration updated.");
+            info!("Configuration validated successfully, reloading services");
             service = new_service;
+            info!("Terminate all spawned services and force to re-bind TCP/UDP sockets");
+            cancel_token.cancel();
           },
           Err(e) => {
-            error!("rpxy failed to be ready. Configuration does not updated: {e}");
+            // Fail-safe: keep running with old config, don't restart services
+            warn!("Config reload failed, keeping previous configuration: {e}");
           }
         };
-        info!("Terminate all spawned services and force to re-bind TCP/UDP sockets");
-        cancel_token.cancel();
       }
     }
   }

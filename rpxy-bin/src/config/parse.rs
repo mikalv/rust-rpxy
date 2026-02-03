@@ -5,9 +5,21 @@ use clap::Arg;
 use hot_reload::{ReloaderReceiver, ReloaderService};
 use rpxy_certs::{CryptoFileSourceBuilder, CryptoReloader, ServerCryptoBase, build_cert_reloader};
 use rpxy_lib::{AppConfigList, ProxyConfig};
+use std::path::PathBuf;
 
 #[cfg(feature = "acme")]
-use rpxy_acme::{ACME_DIR_URL, ACME_REGISTRY_PATH, AcmeManager};
+use rpxy_acme::{ACME_DIR_URL, AcmeManager};
+
+/// Resolve a path against data_dir.
+/// If path is absolute, return as-is. Otherwise, join with data_dir.
+fn resolve_path_against_data_dir(path: &str, data_dir: &str) -> PathBuf {
+  let p = PathBuf::from(path);
+  if p.is_absolute() {
+    p
+  } else {
+    PathBuf::from(data_dir).join(p)
+  }
+}
 
 /// Parsed options from CLI
 /// Options for configuring the application.
@@ -111,11 +123,30 @@ pub async fn build_cert_manager(
     .as_ref()
     .and_then(|v| v.dir_url.as_deref())
     .unwrap_or(ACME_DIR_URL);
+
+  // Check if any app uses ACME
   #[cfg(feature = "acme")]
-  let acme_registry_path = acme_option
-    .as_ref()
-    .and_then(|v| v.registry_path.as_deref())
-    .unwrap_or(ACME_REGISTRY_PATH);
+  let any_app_uses_acme = apps.0.values().any(|app| {
+    app.tls.as_ref().and_then(|t| t.acme).unwrap_or(false)
+  });
+
+  // Require data_dir if ACME is used
+  #[cfg(feature = "acme")]
+  let acme_registry_path = if any_app_uses_acme {
+    let data_dir = config.data_dir.as_ref().ok_or_else(|| {
+      anyhow!("ACME is enabled but 'data_dir' is not set. Please add to your config:\n  data_dir = \"/var/lib/rpxy\"")
+    })?;
+    let registry_subpath = acme_option
+      .as_ref()
+      .and_then(|v| v.registry_path.as_deref())
+      .unwrap_or("acme");
+    resolve_path_against_data_dir(registry_subpath, data_dir)
+      .to_string_lossy()
+      .to_string()
+  } else {
+    // Not used, but need a placeholder for the code below
+    String::new()
+  };
 
   let mut crypto_source_map = HashMap::default();
   for app in apps.0.values() {
@@ -128,7 +159,7 @@ pub async fn build_cert_manager(
       #[cfg(feature = "acme")]
       let mut tls = tls.clone();
       #[cfg(feature = "acme")]
-      build_tls_for_app_acme(&mut tls, &acme_option, server_name, acme_registry_path, acme_dir_url)?;
+      build_tls_for_app_acme(&mut tls, &acme_option, server_name, &acme_registry_path, acme_dir_url)?;
 
       let crypto_file_source = CryptoFileSourceBuilder::default()
         .tls_cert_path(tls.tls_cert_path.as_ref().unwrap())
@@ -152,7 +183,7 @@ pub async fn build_cert_manager(
 /// * `runtime_handle` - Tokio runtime handle for async operations.
 ///
 /// # Returns
-/// Returns an option containing an [`AcmeManager`](rpxy-bin/src/config/parse.rs:153) if ACME is configured, or `None` otherwise.
+/// Returns an option containing an [`AcmeManager`] if ACME is configured, or `None` otherwise.
 /// Returns an error if configuration is invalid or required fields are missing.
 pub async fn build_acme_manager(
   config: &ConfigToml,
@@ -183,9 +214,18 @@ pub async fn build_acme_manager(
     return Ok(None);
   }
 
+  // Require data_dir for ACME
+  let data_dir = config.data_dir.as_ref().ok_or_else(|| {
+    anyhow!("ACME is enabled but 'data_dir' is not set. Please add to your config:\n  data_dir = \"/var/lib/rpxy\"")
+  })?;
+
+  // Resolve registry_path against data_dir
+  let registry_subpath = acme_option.registry_path.as_deref().unwrap_or("acme");
+  let resolved_registry_path = resolve_path_against_data_dir(registry_subpath, data_dir);
+
   let acme_manager = AcmeManager::try_new(
     acme_option.dir_url.as_deref(),
-    acme_option.registry_path.as_deref(),
+    Some(resolved_registry_path.to_string_lossy().as_ref()),
     &[acme_option.email],
     domains.as_slice(),
     runtime_handle,

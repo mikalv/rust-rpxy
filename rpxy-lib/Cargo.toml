@@ -57,6 +57,9 @@ async-trait = "0.1.89"
 anyhow = "1.0.100"
 thiserror = "2.0.18"
 
+# Wildcard domain matching
+wildcard = "0.2"
+
 # http for both server and client
 http = "1.4.0"
 http-body-util = "0.1.3"

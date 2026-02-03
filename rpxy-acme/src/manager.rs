@@ -1,5 +1,5 @@
 use crate::{
-  constants::{ACME_DIR_URL, ACME_REGISTRY_PATH},
+  constants::ACME_DIR_URL,
   dir_cache::DirCache,
   error::RpxyAcmeError,
   log::*,
@@ -44,8 +44,8 @@ impl AcmeManager {
     let _ = rustls::crypto::CryptoProvider::install_default(rustls_post_quantum::provider());
 
     let acme_registry_dir = acme_registry_dir
-      .map(|v| v.to_ascii_lowercase())
-      .map_or_else(|| PathBuf::from(ACME_REGISTRY_PATH), PathBuf::from);
+      .map(|v| PathBuf::from(v.to_ascii_lowercase()))
+      .ok_or(RpxyAcmeError::InvalidAcmeRegistryPath)?;
     if acme_registry_dir.exists() && !acme_registry_dir.is_dir() {
       return Err(RpxyAcmeError::InvalidAcmeRegistryPath);
     }

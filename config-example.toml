@@ -27,6 +27,11 @@ max_clients = 512
 # Optional: Listen [::]
 listen_ipv6 = false
 
+# Base directory for data files (ACME certs, cache, etc.)
+# REQUIRED if using ACME or cache features.
+# Can be absolute path or relative to this config file's location.
+data_dir = "/var/lib/rpxy"
+
 # Optional: App that serves all plaintext http request by referring to HOSTS or request header
 # except for configured application.
 # Note that this is only for http.
@@ -100,9 +105,26 @@ reverse_proxy = [{ upstream = [{ location = 'www.google.com', tls = true }] }]
 ######################################################################
 # ACME enabled example. ACME will be used to get a certificate for the server_name with ACME tls-alpn-01 protocol.
 # Note that acme option must be specified in the experimental section.
+# Note: data_dir must be set when using ACME.
 [apps.localhost_with_acme]
 server_name = 'kubernetes.docker.internal'
 reverse_proxy = [{ upstream = [{ location = 'example.com', tls = true }] }]
+tls = { https_redirection = true, acme = true }
+
+######################################################################
+# Wildcard domain example. Matches any subdomain like foo.example.com, bar.example.com, etc.
+# Exact matches (like api.example.com defined separately) take priority over wildcards.
+# Note: Wildcard domains cannot use ACME (requires DNS-01 challenge which is not yet supported).
+#       You must provide manual certificates for wildcard domains.
+[apps.wildcard_example]
+server_name = '*.example.com'
+reverse_proxy = [{ upstream = [{ location = 'backend.internal:8080' }] }]
+tls = { https_redirection = true, tls_cert_path = '/certs/wildcard.example.com.crt', tls_cert_key_path = '/certs/wildcard.example.com.key' }
+
+# Exact match takes priority over wildcard above
+[apps.api_example]
+server_name = 'api.example.com'
+reverse_proxy = [{ upstream = [{ location = 'api-backend.internal:8080' }] }]
 tls = { https_redirection = true, acme = true }
 
 ###################################
@@ -130,14 +152,16 @@ max_idle_timeout = 10              # secs. 0 represents an infinite timeout.
 # WARNING: If a peer or its network path malfunctions or acts maliciously, an infinite idle timeout can result in permanently hung futures!
 
 # If this specified, file cache feature is enabled
+# Note: data_dir must be set when using cache.
 [experimental.cache]
-cache_dir = './cache'                # optional. default is "./cache" relative to the current working directory
+cache_dir = 'cache'                  # relative to data_dir, or absolute path
 max_cache_entry = 1000               # optional. default is 1k
 max_cache_each_size = 65535          # optional. default is 64k
 max_cache_each_size_on_memory = 4096 # optional. default is 4k if 0, it is always file cache.
 
 # ACME settings. Unless specified, ACME is disabled.
+# Note: data_dir must be set when using ACME.
 [experimental.acme]
 dir_url = "https://localhost:14000/dir" # optional. default is "https://acme-v02.api.letsencrypt.org/directory"
 email = "test@example.com"
-registry_path = "./acme_registry"       # optional. default is "./acme_registry" relative to the current working directory
+registry_path = "acme"                  # relative to data_dir, or absolute path
