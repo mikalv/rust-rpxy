@@ -77,6 +77,23 @@ impl DirCache {
     let hash = BASE64_URL_SAFE_NO_PAD.encode(ctx.finish());
     format!("cached_cert_{}", hash)
   }
+
+  pub async fn verify_write_permissions(&self) -> Result<(), std::io::Error> {
+    Self::verify_dir_writable(&self.account_dir).await?;
+    Self::verify_dir_writable(&self.cert_dir).await?;
+    Ok(())
+  }
+
+  async fn verify_dir_writable(dir: &Path) -> Result<(), std::io::Error> {
+    let dir = dir.to_owned();
+    unblock(move || {
+      std::fs::create_dir_all(&dir)?;
+      let test_file = dir.join(".write_test");
+      std::fs::write(&test_file, b"test")?;
+      std::fs::remove_file(&test_file)?;
+      Ok(())
+    }).await
+  }
 }
 
 #[async_trait]
